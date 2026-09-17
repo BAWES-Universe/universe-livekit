@@ -1,0 +1,40 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit-node
+    restart: unless-stopped
+
+    # Host networking is the whole point of this deployment.
+    # It lets LiveKit own the media ports directly on the host: no Docker bridge,
+    # no port publishing, no per-port proxy processes. That makes LiveKit's full
+    # default media range (50000-60000) viable - publishing 10,000 ports through
+    # Docker's userland proxy would spawn one helper process per port.
+    # LiveKit's own deployment guide recommends host networking in Docker.
+    network_mode: host
+
+    # LiveKit ignores ad-hoc per-field environment variables for rtc.* settings,
+    # so everything that matters lives in the config file.
+    command: ["--config", "/etc/livekit.yaml"]
+
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+    environment:
+      # Supplied by the platform (Coolify / your env file). Never commit values.
+      # LIVEKIT_KEYS is the "<api-key>: <api-secret>" pair LiveKit expects.
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS in the platform environment}
+      LIVEKIT_REDIS_PASSWORD: ${LIVEKIT_REDIS_PASSWORD:?set LIVEKIT_REDIS_PASSWORD in the platform environment}
+
+    # Health is reported by the platform; LiveKit serves "OK" on its HTTP port.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    labels:
+      # Raw Compose Deployment mode: the platform does not add these for us.
+      - coolify.managed=true
+      - coolify.type=application
+      - coolify.resourceName=livekit-node

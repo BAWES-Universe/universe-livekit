@@ -1,0 +1,11 @@
+# Credentials must never be committed. They are supplied by the platform.
+.env
+*.env
+!.env.example
+
+# Local artefacts
+*.log
+*.pem
+*.key
+*.crt
+.DS_Store

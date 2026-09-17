@@ -1,0 +1,56 @@
+# LiveKit server configuration
+#
+# This file is the source of truth for everything LiveKit's own environment
+# variables cannot express. LiveKit does not recognise per-field rtc.* variables
+# (e.g. LIVEKIT_RTC_UDP_PORT is silently ignored), which is why the settings below
+# must live here rather than in the platform's environment variables.
+#
+# Reference: https://docs.livekit.io/transport/self-hosting/deployment/
+
+# Main HTTP/WebSocket port. Serve this through a TLS-terminating proxy on 443 -
+# browsers reach it as wss://<your-domain>/rtc.
+port: 7880
+
+log_level: info
+
+rtc:
+  # ICE over TCP. Used by clients that cannot reach the server over UDP
+  # (corporate networks, some VPNs). This port cannot sit behind a
+  # TLS-terminating proxy and must be reachable directly on the node.
+  tcp_port: 7881
+
+  # Media port range - LiveKit's default. Each participant uses ports from this
+  # range, so the range size sets the practical per-node participant ceiling.
+  # Both ends of the range must be reachable from the internet over UDP.
+  port_range_start: 50000
+  port_range_end: 60000
+
+  # Discover the node's public IP via STUN and advertise that address to clients.
+  # Required whenever the host has a public IP that is not bound to the process
+  # (containers, NAT, cloud VMs). Without it, clients are handed an
+  # unreachable private address.
+  use_external_ip: true
+
+# Redis sits on the same host in this deployment and is reached directly.
+# Setting redis makes LiveKit fully distributed: clients can connect to any node
+# and are routed to whichever node hosts their room. That is what makes adding a
+# second node a matter of pointing it at the same Redis.
+redis:
+  address: 127.0.0.1:6379
+  db: 0
+  # password is supplied via the LIVEKIT_REDIS_PASSWORD environment variable,
+  # which LiveKit does honour. Never write credentials into this file.
+
+# NOTE: track-level configuration such as keys is supplied through the
+# LIVEKIT_KEYS environment variable by the platform, not committed here.
+#
+# To add the embedded TURN relay later (covers networks that block UDP and
+# plain TCP), uncomment and complete:
+#
+# turn:
+#   enabled: true
+#   domain: <turn-domain-matching-the-certificate>
+#   tls_port: 5349        # must be 443 when there is no load balancer in front
+#   cert_file: /path/to/turn.crt
+#   key_file: /path/to/turn.key
+#   udp_port: 3478        # alternative for firewalls that pass UDP/443

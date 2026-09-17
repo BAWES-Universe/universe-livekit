@@ -1,0 +1,56 @@
+# LiveKit behind a TLS-terminating reverse proxy, on a host-networked container
+#
+# Why this file exists
+# -------------------
+# The container runs with `network_mode: host`, so it has no Docker bridge
+# address. Label-based discovery (the usual `traefik.http.*` container labels)
+# cannot resolve it, because the proxy has no container IP to route to.
+#
+# A Traefik file-provider route solves that: it points at the host itself.
+# `172.18.0.1` is the Docker bridge gateway - the host as seen from inside a
+# container. Confirm yours with:
+#
+#     ip -4 addr show <bridge-interface> | grep inet
+#
+# Place this file where the proxy watches for dynamic configuration. For Coolify
+# that is /data/coolify/proxy/dynamic/ ; Coolify's proxy runs Traefik with
+# --providers.file.directory and --providers.file.watch=true, which you can
+# confirm with:
+#
+#     docker inspect coolify-proxy --format '{{json .Args}}' | tr ',' '\n' | grep providers
+#
+# Replace <your-domain> with the hostname clients use, e.g. livekit.example.com.
+# The certificate resolver name must match the proxy's configured resolver
+# (Coolify calls it `letsencrypt`).
+
+http:
+  middlewares:
+    livekit-redirect:
+      redirectScheme:
+        scheme: https
+
+  routers:
+    # Plain HTTP: redirect to HTTPS, same behaviour as a normal proxied app.
+    livekit-http:
+      entryPoints:
+        - http
+      rule: Host(`<your-domain>`)
+      middlewares:
+        - livekit-redirect
+      service: livekit-node
+
+    # HTTPS/WSS: this is the endpoint clients connect to for signalling.
+    livekit-https:
+      entryPoints:
+        - https
+      rule: Host(`<your-domain>`)
+      service: livekit-node
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    livekit-node:
+      loadBalancer:
+        servers:
+          # The host, where the host-networked LiveKit listens on its HTTP port.
+          - url: http://172.18.0.1:7880

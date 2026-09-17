@@ -1,0 +1,63 @@
+name: validate
+
+# Validates the deployment definition and guards against committed credentials.
+# This repository is public: anything merged here is world-readable forever.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a full commit SHA rather than a tag, so a compromised or
+      # retagged upstream release cannot change what runs here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Compose definition is valid
+        run: |
+          # Required variables are supplied as throwaway values: this proves the
+          # deployment declares them as required, without needing real secrets.
+          LIVEKIT_KEYS="ci:ci" LIVEKIT_REDIS_PASSWORD="ci" docker compose -f docker-compose.yaml config -q
+          echo "compose ok"
+
+      - name: LiveKit config parses
+        run: |
+          python3 - <<'EOF'
+          import yaml
+          with open("livekit.yaml") as fh:
+              cfg = yaml.safe_load(fh)
+          assert cfg["rtc"]["port_range_start"] < cfg["rtc"]["port_range_end"], "invalid media port range"
+          assert cfg["rtc"]["use_external_ip"] is True, "use_external_ip must be on for public hosts"
+          assert "keys" not in cfg, "API keys must not live in the config file"
+          assert "password" not in cfg.get("redis", {}), "redis password must come from the environment"
+          print("livekit.yaml ok")
+          EOF
+
+      - name: Proxy route parses
+        run: |
+          python3 - <<'EOF'
+          import glob, yaml
+          for path in glob.glob("traefik/*.yaml"):
+              with open(path) as fh:
+                  yaml.safe_load(fh)
+              print(f"{path} ok")
+          EOF
+
+      - name: No credentials committed
+        run: |
+          set -e
+          # Look for assignments of secret-looking values that are not variable
+          # references. Flagging is better than missing a leak in a public repo.
+          if grep -rInE '(LIVEKIT_KEYS|API_SECRET|API_KEY|REDIS_PASSWORD)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+=_-]{12,}' \
+               --include='*.yaml' --include='*.yml' --include='*.env*' . \
+             | grep -v '\${' ; then
+            echo "::error::possible committed credential - rotate it, then remove it"
+            exit 1
+          fi
+          echo "no committed credentials found"
