@@ -31,9 +31,15 @@ services:
 
     environment:
       # Supplied by the platform (Coolify / your env file). Never commit values.
-      # LIVEKIT_KEYS is the "<api-key>: <api-secret>" pair LiveKit expects.
-      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS in the platform environment}
-      LIVEKIT_REDIS_PASSWORD: ${LIVEKIT_REDIS_PASSWORD:?set LIVEKIT_REDIS_PASSWORD in the platform environment}
+      # LIVEKIT_KEYS is the "<api-key>: <api-secret>" pair LiveKit expects - the
+      # space after the colon is required or the server refuses to start.
+      #
+      # Declared with `:?` so Compose refuses to start without them. Deliberately
+      # NO inline message: Coolify's Compose parser reads the text after `:?` as
+      # the variable's value, which silently ships the error message instead of
+      # the credential and crash-loops the server.
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?}
+      LIVEKIT_REDIS_PASSWORD: ${LIVEKIT_REDIS_PASSWORD:?}
 
     # Health is reported by the platform; LiveKit serves "OK" on its HTTP port.
     healthcheck:

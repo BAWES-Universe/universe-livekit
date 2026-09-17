@@ -31,6 +31,10 @@ chk(s.get("network_mode") == "host",  "container owns the host network, no bridg
 chk("ports" not in s,                 "no published ports (meaningless in host mode)")
 chk(all("${" in v and ":?" in v for v in env.values()),
                                       "credentials are required references, never literals")
+# Coolify's Compose parser takes the text after `:?` as the variable's VALUE, so a
+# friendly inline message becomes the credential and crash-loops the server.
+chk(all(v.strip().endswith(":?}") for v in env.values()),
+                                      "required references carry no inline message")
 chk(any(":ro" in str(v) for v in s.get("volumes", [])), "server config mounted read-only")
 # A floating tag turns every recreation into an unplanned upgrade, so the pin is
 # a property worth testing rather than a convention.
