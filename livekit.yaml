@@ -31,6 +31,12 @@ rtc:
   # unreachable private address.
   use_external_ip: true
 
+  # Skip the self-ping that normally validates the discovered public IP. This host
+  # advertises its public address but cannot reach itself on the media ports from
+  # outside (unsolicited inbound UDP to those ports does not arrive), so the check
+  # always fails and logs a warning while still using the correct address.
+  skip_external_ip_validation: true
+
 # Redis sits on the same host in this deployment and is reached directly.
 # Setting redis makes LiveKit fully distributed: clients can connect to any node
 # and are routed to whichever node hosts their room. That is what makes adding a
