@@ -45,7 +45,12 @@ jobs:
           import glob, yaml
           for path in glob.glob("traefik/*.yaml"):
               with open(path) as fh:
-                  yaml.safe_load(fh)
+                  text = fh.read()
+              # Traefik renders these files as Go templates: a double brace is
+              # evaluated as a function call and makes the whole file fail to
+              # load, taking the route down with it. This has bitten us once.
+              assert "{{" not in text, f"{path}: double-brace template syntax will break the file provider"
+              yaml.safe_load(text)
               print(f"{path} ok")
           EOF
 

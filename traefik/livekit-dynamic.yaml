@@ -15,9 +15,11 @@
 # Place this file where the proxy watches for dynamic configuration. For Coolify
 # that is /data/coolify/proxy/dynamic/ ; Coolify's proxy runs Traefik with
 # --providers.file.directory and --providers.file.watch=true, which you can
-# confirm with:
+# confirm by inspecting the proxy container's arguments.
 #
-#     docker inspect coolify-proxy --format '{{json .Args}}' | tr ',' '\n' | grep providers
+# IMPORTANT: Traefik renders these files as Go templates, so any double-brace
+# sequence is evaluated as a function call and makes the file fail to load with
+# "function ... not defined". Never put example template syntax in a comment here.
 #
 # Replace <your-domain> with the hostname clients use, e.g. livekit.example.com.
 # The certificate resolver name must match the proxy's configured resolver
