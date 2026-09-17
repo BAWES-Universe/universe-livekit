@@ -48,6 +48,14 @@ chk(r["use_external_ip"] is True,     "external IP discovery on (needed behind N
 chk(c.get("port") == 7880 and r.get("tcp_port") == 7881, "http 7880, TCP fallback 7881")
 chk("keys" not in c and "password" not in c.get("redis", {}), "no credentials in the config file")
 
+# The relay is optional; when it is on, its advertised name and its forwarding
+# range are the two things that must not be left implicit.
+turn = c.get("turn") or {}
+if turn.get("enabled"):
+    chk(bool(turn.get("domain")), "turn: the relay advertises a resolvable domain")
+    lo, hi = turn.get("relay_range_start", 0), turn.get("relay_range_end", 0)
+    chk(0 < lo < hi and (hi - lo) < 1000, f"turn: relay forwarding range bounded ({lo}-{hi})")
+
 for path in glob.glob("traefik/*.yaml"):
     text = open(path).read()
     route = yaml.safe_load(text)
