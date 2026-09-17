@@ -32,6 +32,10 @@ chk("ports" not in s,                 "no published ports (meaningless in host m
 chk(all("${" in v and ":?" in v for v in env.values()),
                                       "credentials are required references, never literals")
 chk(any(":ro" in str(v) for v in s.get("volumes", [])), "server config mounted read-only")
+# A floating tag turns every recreation into an unplanned upgrade, so the pin is
+# a property worth testing rather than a convention.
+img = s.get("image", "")
+chk(":" in img and not img.endswith(":latest"), f"image pinned to an exact release ({img})")
 
 c = yaml.safe_load(open("livekit.yaml")); r = c["rtc"]
 chk(r["port_range_start"] < r["port_range_end"],
@@ -109,20 +113,23 @@ fi
 echo "== runtime: config file against real LiveKit"
 if has_docker; then
   d=$(mktemp -d /tmp/hermes-verify-livekit.XXXXXX)
+  # Test the image this deployment actually pins, not a floating tag: verifying
+  # a different build than the one that ships would be worse than not verifying.
+  img=$(python3 -c "import yaml; print(yaml.safe_load(open('docker-compose.yaml'))['services']['livekit']['image'])")
   # Redis points at localhost in production; strip it so this isolated run gets
   # as far as reporting its ports.
   python3 - "$d/livekit.yaml" <<'PY'
 import re, sys
 open(sys.argv[1], "w").write(re.sub(r"\nredis:\n(?:  .*\n)+", "\n", open("livekit.yaml").read()))
 PY
-  log=$(timeout 90 docker run --rm -v "$d/livekit.yaml":/etc/livekit.yaml:ro \
+  log=$(timeout 120 docker run --rm -v "$d/livekit.yaml":/etc/livekit.yaml:ro \
     -e LIVEKIT_KEYS="dummykey: dummysecretdummysecretdummysecret" \
-    livekit/livekit-server:latest --config /etc/livekit.yaml 2>&1 | head -20)
+    "$img" --config /etc/livekit.yaml 2>&1 | head -20)
   line=$(grep -m1 'starting LiveKit server' <<<"$log")
   if [ -z "$line" ]; then
     bad "the binary did not start with this config"; tail -3 <<<"$log" | sed 's/^/        /'; fail=$((fail+1))
   elif grep -q "50000, 60000" <<<"$line"; then
-    ok "the binary applied the configured media range"; pass=$((pass+1))
+    ok "$(sed 's/.*"version": "\([^"]*\)".*/v\1 applied the configured media range/' <<<"$line")"; pass=$((pass+1))
   else
     bad "the binary ignored the configured range: $(sed 's/.*portICERange/portICERange/' <<<"$line")"; fail=$((fail+1))
   fi

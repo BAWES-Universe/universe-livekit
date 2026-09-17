@@ -1,6 +1,16 @@
 services:
   livekit:
-    image: livekit/livekit-server:latest
+    # Pinned to an exact release. This matters more than which release: with
+    # :latest, every future container recreation silently becomes an unplanned
+    # upgrade with no rollback target. The previous deployment ran :latest and
+    # drifted from the v1.9.8 build it was created with to whatever today's
+    # latest is, purely because the container was eventually recreated.
+    #
+    # v1.13.7 digests / rollback references:
+    #   v1.13.7  livekit/livekit-server@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
+    #   v1.9.8   livekit/livekit-server@sha256:ae6f913f12677b95898b1c9e3ff0e3c8ca2655c662c045dea706007fe19bcf9e
+    # To roll back, set the image to that tag and redeploy.
+    image: livekit/livekit-server:v1.13.7
     container_name: livekit-node
     restart: unless-stopped
 

@@ -36,6 +36,19 @@ file. The two things LiveKit *does* honour from the environment are the API keys
 (`LIVEKIT_KEYS`) and the Redis password (`LIVEKIT_REDIS_PASSWORD`); both are
 injected by the platform and never committed.
 
+## Version policy
+
+The image is pinned to an exact release, never a floating tag. With `:latest`,
+every container recreation is an unplanned upgrade: the deployment silently moves
+to whatever the tag resolves to that day, with no reviewed diff and no rollback
+target. That is exactly how the previous deployment drifted from the build it was
+created with.
+
+Upgrading is therefore a deliberate, verifiable change: bump the tag, run
+`./scripts/verify.sh` (it tests the pinned image, not `latest`), then deploy and
+check media. Record the digest alongside the tag so a rollback is unambiguous —
+see the comment on the image line in `docker-compose.yaml`.
+
 ## Ports
 
 | Port | Protocol | Exposure | Notes |

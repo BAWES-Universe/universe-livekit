@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>livekit client compatibility</title></head>
+<body>
+<pre id="log">starting…</pre>
+<script type="module">
+// Exercises the exact livekit-client bundle the game ships against the target
+// server, in both directions: publish a track, and subscribe to a remote one.
+import { Room, RoomEvent, Track } from './livekit-client.esm.mjs';
+
+const out = document.getElementById('log');
+const log = (m) => { out.textContent += m + '\n'; console.log('[compat] ' + m); };
+const p = new URLSearchParams(location.search);
+const url = p.get('url') || 'ws://127.0.0.1:7880';
+const token = p.get('token') || await (await fetch('./token.txt')).text();
+
+const state = { connected: false, published: false, subscribed: false, inboundBytes: 0, error: null };
+const done = (r) => { window.__RESULT__ = Object.assign({ result: r }, state); log('RESULT ' + r + ' ' + JSON.stringify(state)); };
+
+// Same construction as the game: play/src/front/Livekit/LiveKitRoom.ts
+const room = new Room({ adaptiveStream: true, dynacast: true });
+
+room.on(RoomEvent.Connected, async () => {
+  state.connected = true;
+  log('connected to room ' + room.name);
+  try {
+    const ctx = new AudioContext();
+    // A headless browser has no user gesture, so resume() can stay pending
+    // forever. Never block the test on it.
+    await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
+    const dest = ctx.createMediaStreamDestination();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = 440; gain.gain.value = 0.8;
+    osc.connect(gain); gain.connect(dest); osc.start();
+    log('audio context state: ' + ctx.state);
+    await room.localParticipant.publishTrack(dest.stream.getAudioTracks()[0], {
+      name: 'compat-tone', source: Track.Source.Microphone,
+    });
+    state.published = true;
+    log('published synthetic mic track');
+  } catch (e) { state.error = 'publish: ' + (e && e.message); }
+});
+
+room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+  state.subscribed = true;
+  log('subscribed to ' + pub.kind + ' from ' + participant.identity);
+  // Received bytes prove media actually arrived, not just signalling.
+  setTimeout(async () => {
+    try {
+      const report = await track.getRTCStatsReport();
+      let bytes = 0, frames = 0;
+      report.forEach((s) => { if (s.type === 'inbound-rtp') { bytes += s.bytesReceived || 0; frames += s.packetsReceived || 0; } });
+      state.inboundBytes = bytes; state.inboundPackets = frames;
+      log('inbound: ' + bytes + ' bytes / ' + frames + ' packets');
+      done(bytes > 0 ? 'MEDIA_RECEIVED' : 'SUBSCRIBED_BUT_NO_BYTES');
+    } catch (e) { state.error = 'stats: ' + (e && e.message); done('SUBSCRIBED_STATS_FAILED'); }
+  }, 6000);
+});
+
+room.on(RoomEvent.Disconnected, (r) => log('disconnected: ' + r));
+room.connect(url, token).catch((e) => { state.error = 'connect: ' + (e && e.message); done('CONNECT_FAILED'); });
+setTimeout(() => done(state.connected ? (state.published ? 'PUBLISHED_NO_REMOTE_TRACK' : 'CONNECTED_ONLY') : 'TIMEOUT'), 30000);
+</script>
+</body>
+</html>
